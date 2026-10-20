@@ -41,7 +41,12 @@ class LocalServer {
       let n = 0;
       try { n = E.runBots(this.st, 1); } catch (e) { console.error(e); }
       if (n) { this.emit(); this.pump(); }
-    }, 750);
+    }, this.myHandLive() ? 750 : 280);
+  }
+  myHandLive() {
+    const rd = this.st.round;
+    const i = E.seatOf(this.st, this.uid);
+    return !!(rd && rd.players[i] && !rd.players[i].packed);
   }
   stop() { clearTimeout(this.timer); }
 }
@@ -225,12 +230,26 @@ function enterCloud(api, code, firstView) {
 }
 function onView(v) {
   view = v;
+  // Private showdown result: a card for the two players in it, a toast for everyone else.
+  const ls = v.lastShow;
+  if (ui.seenShow === undefined) ui.seenShow = ls ? ls.n : 0;
+  else if (ls) {
+    if (ls.n !== ui.seenShow) {
+      ui.seenShow = ls.n;
+      const nmOf = (i) => (v.seats[i] ? v.seats[i].name : 'Someone');
+      const label = ls.type === 'sideshow' ? 'Sideshow' : 'Backshow';
+      if (ls.denied) toast(`${nmOf(ls.to)} denied the ${ls.type} from ${nmOf(ls.from)} and paid ${M(ls.cost)}.`);
+      else if (ls.hands && !ui.modal) ui.modal = 'show';
+      else toast(`${label}: ${nmOf(ls.winner)} stays in, ${nmOf(ls.loser)} packs.`);
+    }
+  }
   // Show every finished hand to everyone first. The dealer picks the next game from that screen.
   const rnum = v.lastResult ? v.lastResult.num : -1;
   if (ui.seenResult === undefined) ui.seenResult = rnum;
   else if (rnum !== ui.seenResult) {
     ui.seenResult = rnum;
     if (ui.modal !== 'choose') ui.modal = 'result';
+    if (v.lastShow) ui.seenShow = v.lastShow.n;
   }
   if (v.phase !== 'choose' && ui.modal === 'choose') ui.modal = null;
   render();
@@ -238,7 +257,7 @@ function onView(v) {
 function leave() {
   if (server && server.mode === 'cloud') server.act({ type: 'leave' }).catch(() => {});
   if (server) server.stop();
-  server = null; view = null; ui.modal = null;
+  server = null; view = null; ui.modal = null; ui.seenShow = undefined; ui.seenResult = undefined;
   try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
   renderHome();
 }
@@ -466,7 +485,23 @@ function modalHTML(v) {
   if (!ui.modal) return '';
   let body = '';
   const S = v.settings;
-  if (ui.modal === 'result') {
+  if (ui.modal === 'show') {
+    const L = v.lastShow;
+    if (!L || !L.hands) return '';
+    const nmOf = (i) => (i === v.me ? 'You' : v.seats[i] ? esc(v.seats[i].name) : 'Someone');
+    const won = L.winner === v.me;
+    const rows = [L.from, L.to].map((i) => {
+      const h = L.hands[i];
+      const win = L.winner === i;
+      return `<div class="rhand ${win ? 'win' : ''}"><div class="hcards">${h.cards.map((c, k) => cardHTML(c, { size: 'md', joker: h.jokers && h.jokers[k] })).join('')}</div>
+        <div><b>${nmOf(i)}</b>${win ? ' <span class="wtag">Stays in</span>' : ''}<small>${esc(h.desc)}</small></div></div>`;
+    }).join('');
+    body = `<div class="sub">${L.type === 'sideshow' ? 'Sideshow' : 'Backshow'}</div>
+      <h2>${won ? 'You stay in' : 'You pack'}</h2>
+      ${L.note ? `<p class="hint">${esc(L.note.replace(/^ \(|\)$/g, ''))}</p>` : ''}
+      <div class="rhands">${rows}</div>
+      <div class="btns"><button class="btn primary" data-a="close">${won ? 'Keep playing' : 'Watch the rest'}</button></div>`;
+  } else if (ui.modal === 'result') {
     const r = v.lastResult;
     if (!r) return '';
     const names = r.winners.map((w) => (v.seats[w] ? esc(v.seats[w].name) : 'Someone')).join(' and ');

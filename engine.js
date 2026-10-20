@@ -490,6 +490,8 @@ function resolvePrivate(st, accept) {
     const cost = (type === 'backshow' ? 2 : 3) * rd.stake;
     pay(st, to, cost);
     rd.pending = null;
+    st.showSeq = (st.showSeq || 0) + 1;
+    st.lastShow = { n: st.showSeq, type, from, to, denied: true, cost };
     log(st, `${nm(st, to)} denies the ${label} and pays ${money(cost)}.`);
     advance(st, type === 'sideshow' ? to : from);
     return;
@@ -499,6 +501,11 @@ function resolvePrivate(st, accept) {
   const loser = j.winner === from ? to : from;
   rd.players[loser].packed = true;
   rd.pending = null;
+  st.showSeq = (st.showSeq || 0) + 1;
+  st.lastShow = {
+    n: st.showSeq, type, from, to, winner: j.winner, loser, note: j.note,
+    hands: { [from]: { cards: rd.players[from].cards, desc: j.ha.desc, jokers: j.ha.jokers }, [to]: { cards: rd.players[to].cards, desc: j.hb.desc, jokers: j.hb.jokers } },
+  };
   log(st, `${label[0].toUpperCase() + label.slice(1)}: ${nm(st, j.winner)} stays in${j.note}. ${nm(st, loser)} packs.`);
   advance(st, from);
 }
@@ -857,10 +864,21 @@ function botAct(st, seat) {
   if (A.canShow && (s > 0.55 || rand(100) < 15)) return { type: 'show' };
   if (s < 0.2 && rand(100) < 80) return { type: 'pack' };
   if (s < 0.35 && rd.stake > 4 * rd.step && rand(100) < 60) return { type: 'pack' };
-  if (A.canSideshow && s > 0.35 && s < 0.7 && rand(100) < 15) return { type: 'sideshow' };
-  if (A.canBackshow && s > 0.35 && s < 0.7 && rand(100) < 10) return { type: 'backshow' };
+  if ((A.canSideshow || A.canBackshow) && s > 0.3 && s < 0.85 && rand(100) < 30) {
+    const both = A.canSideshow && A.canBackshow;
+    return { type: both ? (rand(2) ? 'sideshow' : 'backshow') : A.canSideshow ? 'sideshow' : 'backshow' };
+  }
   if (s > 0.8 && c.maxRaise > 0 && rd.stake < 12 * rd.step && rand(100) < 45) return { type: 'chaal', raise: Math.min(c.maxRaise, 1 + rand(2)) };
   return { type: 'chaal', raise: 0 };
+}
+// Strong hands take the showdown. Weak hands sometimes pay to deny it, if denying is on and affordable.
+function botRespond(st, seat) {
+  const A = actionsFor(st, seat);
+  const r = A.respond;
+  const s = botStrength(st, seat);
+  const acceptChance = 35 + Math.round(s * 60); // 35% with junk, ~95% with a monster
+  if (rand(100) < acceptChance || !r || !r.canDeny) return { type: 'respond', accept: true };
+  return { type: 'respond', accept: false };
 }
 function botNext(st) {
   const buy = st.settings.buyIn / 100;
@@ -880,7 +898,7 @@ function botNext(st) {
   if (!rd) return null;
   if (rd.pending) {
     const t = rd.pending.to;
-    return st.seats[t] && st.seats[t].bot ? { seat: t, a: { type: 'respond', accept: true } } : null;
+    return st.seats[t] && st.seats[t].bot ? { seat: t, a: botRespond(st, t) } : null;
   }
   if ((st.phase === 'betting' || st.phase === 'jua') && st.seats[rd.turn] && st.seats[rd.turn].bot) {
     return { seat: rd.turn, a: botAct(st, rd.turn) };
@@ -939,6 +957,12 @@ export function viewFor(st, uid) {
   return {
     id: st.id, v: st.v, me, phase: st.phase, settings: st.settings, seats, dealerSeat: st.dealerSeat, round,
     ml: st.ml ? { wins: st.ml.wins, participants: st.ml.participants, letter: 'JQK'[st.ml.sub % 3] } : null,
+    lastShow: st.lastShow ? (() => {
+      const L = st.lastShow;
+      const o = { n: L.n, type: L.type, from: L.from, to: L.to, winner: L.winner, loser: L.loser, denied: !!L.denied, cost: L.cost, note: L.note };
+      if (L.hands && (me === L.from || me === L.to)) o.hands = L.hands;
+      return o;
+    })() : null,
     mlPrep: st.mlPrep, log: st.log.slice(-40), lastResult: st.lastResult, actions: actionsFor(st, me), variations: VARIATIONS,
   };
 }
