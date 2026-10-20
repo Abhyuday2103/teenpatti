@@ -161,6 +161,8 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
 
 .actions { display: grid; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
 .actions .main .btn { min-height: 52px; font-size: 17px; }
+.actions.busy { opacity: .55; pointer-events: none; position: relative; }
+.actions.busy::after { content: "Sending..."; position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; color: var(--brass); }
 .raise { display: grid; grid-template-columns: 44px 1fr 44px auto; gap: 6px; align-items: center; }
 .rlab { text-align: center; font-size: 14px; line-height: 1.15; display: grid; }
 .rlab small { color: var(--muted); }

@@ -57,20 +57,50 @@ async function firebase() {
   const auth = authM.getAuth(app);
   await auth.authStateReady();
   if (!auth.currentUser) await authM.signInAnonymously(auth);
-  const db = fsM.getFirestore(app);
+  // Long polling is slower to set up but survives phones, sleep and strict Wi-Fi far better than the default stream.
+  const db = fsM.initializeFirestore(app, { experimentalForceLongPolling: true });
   const call = fnM.httpsCallable(fnM.getFunctions(app), 'tp');
+  const viewRef = (id) => fsM.doc(db, 'tables', id, 'views', auth.currentUser.uid);
   fb = {
     uid: auth.currentUser.uid,
     call: async (data) => { try { return (await call(data)).data; } catch (e) { throw new Error(e.message || 'Request failed'); } },
-    watch: (id, cb) => fsM.onSnapshot(fsM.doc(db, 'tables', id, 'views', auth.currentUser.uid), (s) => { if (s.exists()) cb(JSON.parse(s.data().json)); }),
+    watch: (id, cb, onErr) => fsM.onSnapshot(viewRef(id), (s) => { if (s.exists()) cb(JSON.parse(s.data().json)); }, onErr),
+    fetch: async (id) => { const s = await fsM.getDoc(viewRef(id)); return s.exists() ? JSON.parse(s.data().json) : null; },
   };
   return fb;
 }
 class CloudServer {
-  constructor(api, code) { this.mode = 'cloud'; this.api = api; this.code = code; this.uid = api.uid; }
-  watch(cb) { this.unsub = this.api.watch(this.code, cb); }
-  act(a) { return this.api.call({ op: 'act', tableId: this.code, action: a }); }
-  stop() { if (this.unsub) this.unsub(); }
+  constructor(api, code) { this.mode = 'cloud'; this.api = api; this.code = code; this.uid = api.uid; this.lastV = -1; this.alive = true; }
+  // Only ever move forward, whichever route a fresh view arrives by.
+  take(v) { if (!v || !this.alive || v.v < this.lastV) return; this.lastV = v.v; this.cb(v); }
+  watch(cb) {
+    this.cb = cb;
+    this.listen();
+    // Backup check every 3 seconds in case the live listener silently stalls.
+    this.poll = setInterval(() => this.refresh(), 3000);
+    this.onVis = () => { if (document.visibilityState === 'visible') { this.refresh(); this.listen(); } };
+    document.addEventListener('visibilitychange', this.onVis);
+    window.addEventListener('online', this.onVis);
+  }
+  listen() {
+    if (this.unsub) this.unsub();
+    this.unsub = this.api.watch(this.code, (v) => this.take(v), () => { setTimeout(() => { if (this.alive) this.listen(); }, 2000); });
+  }
+  async refresh() {
+    if (document.visibilityState === 'hidden') return;
+    try { this.take(await this.api.fetch(this.code)); } catch (e) { /* next tick tries again */ }
+  }
+  async act(a) {
+    const r = await this.api.call({ op: 'act', tableId: this.code, action: a });
+    if (r && r.view) this.take(r.view);
+  }
+  stop() {
+    this.alive = false;
+    if (this.unsub) this.unsub();
+    clearInterval(this.poll);
+    document.removeEventListener('visibilitychange', this.onVis);
+    window.removeEventListener('online', this.onVis);
+  }
 }
 
 // ---------- app state ----------
@@ -81,9 +111,13 @@ const ui = { raise: 0, swap: false, logOpen: false, modal: null, choice: null, a
 async function act(a) {
   if (!server || ui.busy) return;
   ui.busy = true;
+  const box = document.querySelector('.actions');
+  if (box) box.classList.add('busy');
+  // Safety release: a stalled request must never lock the buttons until a reload.
+  const guard = setTimeout(() => { ui.busy = false; render(); if (server && server.refresh) server.refresh(); }, 12000);
   try { await server.act(a); ui.raise = 0; ui.swap = false; }
-  catch (e) { toast(e.message); }
-  finally { ui.busy = false; render(); }
+  catch (e) { toast(e.message); if (server && server.refresh) server.refresh(); }
+  finally { clearTimeout(guard); ui.busy = false; render(); }
 }
 
 // ---------- home screen ----------
@@ -170,7 +204,7 @@ async function hostTable() {
   try {
     const api = await firebase();
     const r = await api.call({ op: 'create', name, settings: s });
-    enterCloud(api, r.tableId);
+    enterCloud(api, r.tableId, r.view);
   } catch (e) { toast(e.message); }
 }
 async function joinTable() {
@@ -179,14 +213,15 @@ async function joinTable() {
   if (code.length !== 5) { toast('Table codes are 5 letters'); return; }
   try {
     const api = await firebase();
-    await api.call({ op: 'act', tableId: code, action: { type: 'join', name } });
-    enterCloud(api, code);
+    const r = await api.call({ op: 'act', tableId: code, action: { type: 'join', name } });
+    enterCloud(api, code, r && r.view);
   } catch (e) { toast(e.message); }
 }
-function enterCloud(api, code) {
+function enterCloud(api, code, firstView) {
   try { history.replaceState(null, '', `${location.pathname}?t=${code}`); } catch (e) { /* not allowed here */ }
   server = new CloudServer(api, code);
   server.watch(onView);
+  if (firstView) server.take(firstView);
 }
 function onView(v) {
   view = v;
