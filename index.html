@@ -163,7 +163,17 @@ h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap
 .actions .main .btn { min-height: 52px; font-size: 17px; }
 .actions.busy { opacity: .55; pointer-events: none; position: relative; }
 .actions.busy::after { content: "Sending..."; position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; color: var(--brass); }
-.raise { display: grid; grid-template-columns: 44px 1fr 44px auto; gap: 6px; align-items: center; }
+.raise { display: grid; grid-template-columns: 44px 1fr 44px; gap: 6px; align-items: center; }
+.btn.primary.raising { background: var(--ivory); border-color: var(--ivory); }
+.vrule { font-size: 11.5px; line-height: 1.25; color: var(--muted); max-width: 30ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pot.big { font-size: 40px; color: var(--brass); }
+.rhands { display: grid; gap: 10px; }
+.rhand { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; }
+.rhand.win { border-color: var(--brass); background: #2c1d37; }
+.rhand > div:last-child { display: grid; min-width: 0; }
+.rhand small { color: var(--muted); }
+.rhand .hcards { gap: 4px; }
+.wtag { background: var(--brass); color: #21140a; border-radius: 99px; padding: 0 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .rlab { text-align: center; font-size: 14px; line-height: 1.15; display: grid; }
 .rlab small { color: var(--muted); }
 .wait, .hint, .ask { color: var(--muted); font-size: 14px; text-align: center; }

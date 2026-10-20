@@ -98,7 +98,7 @@ function bestOfN(cards, a23High) {
   }
   return best;
 }
-// Best 3 card hand when some cards are jokers. A joker can be any card.
+// Best 3 card hand when some cards are jokers. A joker can be any card, including a copy of one you hold.
 function wild3(cards, flags, a23High) {
   const nat = cards.filter((c, i) => !flags[i]);
   const j = cards.length - nat.length;
@@ -126,9 +126,9 @@ export function describe(s, a23High) {
     case 6: return `Trail of ${RPL[s[1]]}`;
     case 5: return `Pure sequence ${seqName(s[1], a23High)}`;
     case 4: return `Sequence ${seqName(s[1], a23High)}`;
-    case 3: return `Color, ${RCH[s[1]]} high`;
-    case 2: return `Pair of ${RPL[s[1]]}`;
-    default: return `${RCH[s[1]]} high`;
+    case 3: return `Color ${RCH[s[1]]}-${RCH[s[2]]}-${RCH[s[3]]}`;
+    case 2: return `Pair of ${RPL[s[1]]}, ${RCH[s[2]]} kicker`;
+    default: return `High card ${RCH[s[1]]}-${RCH[s[2]]}-${RCH[s[3]]}`;
   }
 }
 function points999(cards) {

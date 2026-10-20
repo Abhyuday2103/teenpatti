@@ -225,9 +225,12 @@ function enterCloud(api, code, firstView) {
 }
 function onView(v) {
   view = v;
-  if (v.phase === 'choose' && v.actions.canChoose && v.seats[v.me] && v.dealerSeat === v.me && ui.autoChoose !== (v.lastResult ? v.lastResult.num : -1)) {
-    ui.autoChoose = v.lastResult ? v.lastResult.num : -1;
-    openChooser();
+  // Show every finished hand to everyone first. The dealer picks the next game from that screen.
+  const rnum = v.lastResult ? v.lastResult.num : -1;
+  if (ui.seenResult === undefined) ui.seenResult = rnum;
+  else if (rnum !== ui.seenResult) {
+    ui.seenResult = rnum;
+    if (ui.modal !== 'choose') ui.modal = 'result';
   }
   if (v.phase !== 'choose' && ui.modal === 'choose') ui.modal = null;
   render();
@@ -286,6 +289,15 @@ function seatHTML(s, v) {
   </div>`;
 }
 
+function ruleLine(v) {
+  const rd = v.round;
+  if (rd.mlLetter) {
+    const n = { J: 'Jack', Q: 'Queen', K: 'King' }[rd.mlLetter];
+    return `Every ${n} and your smallest card are jokers. Win J, Q and K little to take the pot.`;
+  }
+  const x = v.variations.find((y) => y.key === rd.variation);
+  return x ? x.short : '';
+}
 function centerHTML(v) {
   const rd = v.round;
   if (!rd) {
@@ -307,6 +319,7 @@ function centerHTML(v) {
   const blindAmt = rd.stake / 2;
   return `<div class="cmid">
     <div class="vname">${esc(rd.name)}</div>
+    <div class="vrule">${esc(ruleLine(v))}</div>
     <div class="pot">${M(rd.pot)}</div>
     <div class="sub">Chaal ${M(rd.stake)} · Blind ${M(blindAmt)}${rd.tableBoot ? ' · table boot' : ''}</div>
     ${extra}
@@ -373,13 +386,12 @@ function actionsHTML(v) {
       const newStake = c.blind ? pay * 2 : pay;
       out.push(`<div class="btns main">
         <button class="btn" data-a="pack">Pack</button>
-        <button class="btn primary" data-a="chaal" ${c.canAfford ? '' : 'disabled'}>${c.blind ? 'Blind' : 'Chaal'} ${M(c.amount)}</button>
+        <button class="btn primary ${k ? 'raising' : ''}" data-a="chaal" ${c.canAfford ? '' : 'disabled'}>${k ? `${c.blind ? 'Blind raise' : 'Raise'} ${M(pay)}` : `${c.blind ? 'Blind' : 'Chaal'} ${M(c.amount)}`}</button>
       </div>
       <div class="raise">
         <button class="btn sq" data-a="r-" ${k <= 0 ? 'disabled' : ''} aria-label="Smaller raise">−</button>
-        <div class="rlab">${k ? `Raise: pay ${M(pay)}<small>chaal becomes ${M(newStake)}</small>` : `Raise in steps of ${M(c.unit)}`}</div>
+        <div class="rlab">${k ? `Raising ${k} step${k > 1 ? 's' : ''}<small>seen chaal becomes ${M(newStake)}</small>` : `Tap + to raise<small>steps of ${M(c.unit)}</small>`}</div>
         <button class="btn sq" data-a="r+" ${k >= c.maxRaise ? 'disabled' : ''} aria-label="Bigger raise">+</button>
-        <button class="btn" data-a="raise" ${k ? '' : 'disabled'}>Raise</button>
       </div>`);
       const extras = [];
       if (A.showCost != null) extras.push(`<button class="btn" data-a="show" ${A.canShow ? '' : 'disabled'} title="${esc(A.showBlocked || '')}">Show ${M(A.showCost)}</button>`);
@@ -454,7 +466,31 @@ function modalHTML(v) {
   if (!ui.modal) return '';
   let body = '';
   const S = v.settings;
-  if (ui.modal === 'choose') {
+  if (ui.modal === 'result') {
+    const r = v.lastResult;
+    if (!r) return '';
+    const names = r.winners.map((w) => (v.seats[w] ? esc(v.seats[w].name) : 'Someone')).join(' and ');
+    const hands = r.shown && r.shown.length
+      ? `<div class="rhands">${r.shown.map((x) => {
+          const win = r.winners.includes(x.seat);
+          return `<div class="rhand ${win ? 'win' : ''}"><div class="hcards">${x.cards.map((c, i) => cardHTML(c, { size: 'md', joker: x.jokers && x.jokers[i] })).join('')}</div>
+            <div><b>${v.seats[x.seat] ? esc(v.seats[x.seat].name) : ''}</b>${win ? ' <span class="wtag">Winner</span>' : ''}<small>${esc(x.desc)}</small></div></div>`;
+        }).join('')}</div>`
+      : '<p class="hint">Everyone else packed, so no cards were shown.</p>';
+    const dealer = v.seats[v.dealerSeat];
+    const next = r.ml && v.round
+      ? '<button class="btn primary" data-a="close">Keep playing</button>'
+      : v.actions.canChoose
+        ? `<button class="btn" data-a="close">Look at the table</button><button class="btn primary" data-a="open-choose">${v.dealerSeat === v.me ? 'Pick the next game' : `Pick for ${esc(dealer ? dealer.name : 'dealer')}`}</button>`
+        : `<button class="btn primary" data-a="close">OK</button>`;
+    body = `<div class="sub">Round ${r.num} · ${esc(E.variationName(r.variation))}</div>
+      <h2>${names} ${r.ml ? 'takes the letter' : r.winners.length > 1 ? 'split the pot' : 'wins'}</h2>
+      ${r.amount ? `<div class="pot big">${M(r.amount)}</div>` : ''}
+      <p>${esc(r.msg)}</p>
+      ${hands}
+      ${!v.actions.canChoose && !r.ml ? `<p class="hint">${esc(dealer ? dealer.name : 'The winner')} deals next and picks the game.</p>` : ''}
+      <div class="btns">${next}</div>`;
+  } else if (ui.modal === 'choose') {
     const c = ui.choice;
     const seated = v.seats.filter(Boolean).length;
     body = `<h2>Pick the next game</h2>
@@ -544,8 +580,7 @@ document.addEventListener('click', async (ev) => {
     }
     case 'r+': ui.raise = Math.min(ui.raise + 1, A.chaal ? A.chaal.maxRaise : 0); render(); return;
     case 'r-': ui.raise = Math.max(0, ui.raise - 1); render(); return;
-    case 'raise': return act({ type: 'chaal', raise: ui.raise });
-    case 'chaal': return act({ type: 'chaal', raise: 0 });
+    case 'chaal': return act({ type: 'chaal', raise: A.chaal ? Math.min(ui.raise, A.chaal.maxRaise) : 0 });
     case 'swap': ui.swap = !ui.swap; render(); return;
     case 'accept': return act({ type: 'respond', accept: true });
     case 'deny': return act({ type: 'respond', accept: false });

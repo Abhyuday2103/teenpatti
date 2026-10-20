@@ -21,7 +21,7 @@ Practice mode (you vs bots) works with zero setup. Online tables need the Fireba
 Open `docs/firebase-config.js` and replace `null` with your config object. The example in that file shows the shape. These keys are safe to commit, the Firestore rules do the protecting.
 
 ### 3. Deploy the function and rules
-You need Node 20 installed.
+You need Node 22 or newer installed.
 ```
 npm install -g firebase-tools
 firebase login

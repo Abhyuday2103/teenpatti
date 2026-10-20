@@ -29,7 +29,7 @@ function writeState(tx, st, extraUids = []) {
   for (const u of uids) tx.set(t.collection('views').doc(u), { json: JSON.stringify(E.viewFor(st, u)) });
 }
 
-export const tp = onCall({ cors: true, maxInstances: 10 }, async (req) => {
+export const tp = onCall({ cors: true, maxInstances: 10, memory: '256MiB', concurrency: 40 }, async (req) => {
   const uid = req.auth && req.auth.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in first');
   const d = req.data || {};
@@ -38,27 +38,30 @@ export const tp = onCall({ cors: true, maxInstances: 10 }, async (req) => {
       for (let k = 0; k < 6; k++) {
         const id = roomCode();
         const ref = db.collection('tables').doc(id).collection('secret').doc('state');
-        const ok = await db.runTransaction(async (tx) => {
+        const view = await db.runTransaction(async (tx) => {
           const snap = await tx.get(ref);
-          if (snap.exists) return false;
-          writeState(tx, E.createTable(id, uid, d.name, d.settings));
-          return true;
+          if (snap.exists) return null;
+          const st = E.createTable(id, uid, d.name, d.settings);
+          writeState(tx, st);
+          return E.viewFor(st, uid);
         });
-        if (ok) return { tableId: id };
+        if (view) return { tableId: id, view };
       }
       throw new Error('Could not make a room code. Try again.');
     }
     const id = String(d.tableId || '').toUpperCase().trim();
     const ref = db.collection('tables').doc(id).collection('secret').doc('state');
-    await db.runTransaction(async (tx) => {
+    // Send the caller's fresh view straight back, so their screen updates without waiting on the live listener.
+    const view = await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new Error('Table not found. Check the code.');
       const st = JSON.parse(snap.data().json);
       E.dispatch(st, uid, d.action || {});
       E.runBots(st);
       writeState(tx, st, [uid]);
+      return E.viewFor(st, uid);
     });
-    return { ok: true };
+    return { ok: true, view };
   } catch (e) {
     if (e instanceof HttpsError) throw e;
     throw new HttpsError('failed-precondition', (e && e.message) || 'Something went wrong');
