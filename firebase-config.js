@@ -1,6 +1,14 @@
 // Paste your Firebase web config here (Firebase console > Project settings > Your apps > Web app).
 // Leave it as null and the site still works in practice mode against bots.
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: "AIzaSyD1wommGCDAjLUpC258ATEd1tTdrSqa6NI",
+  authDomain: "teenpatti-44fde.firebaseapp.com",
+  projectId: "teenpatti-44fde",
+  storageBucket: "teenpatti-44fde.firebasestorage.app",
+  messagingSenderId: "174340110949",
+  appId: "1:174340110949:web:aa4ba414a64fc10b3fa48c",
+  measurementId: "G-VM0DDHP7S4"
+};
 
 // Example:
 // export const firebaseConfig = {
