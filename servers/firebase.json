@@ -1,0 +1,10 @@
+{
+  "functions": [
+    { "source": "tp", "codebase": "teenpatti" },
+    { "source": "jg", "codebase": "judgment" },
+    { "source": "dc", "codebase": "declare" },
+    { "source": "dl", "codebase": "deal" },
+    { "source": "bd", "codebase": "businessdeal" }
+  ],
+  "firestore": { "rules": "firestore.rules" }
+}
