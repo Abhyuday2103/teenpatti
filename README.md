@@ -76,3 +76,6 @@ To rebuild the single-file practice page: `node tools/build-practice.mjs practic
 - **Face up:** the first 1 or 2 cards dealt to each player are the face-up ones.
 - **Joining mid-game:** you take an open seat and get dealt in next hand.
 - **Host leaves:** the next human player becomes host.
+
+## Online play (Oct 2026)
+Online tables no longer need the Firebase function. The host's browser runs the same server code (`srv/`) and friends connect straight to the host, same as Ultimate Hold'em. See `p2p/core.js`. If the host closes the page the table pauses until they come back; a refresh is fine.
