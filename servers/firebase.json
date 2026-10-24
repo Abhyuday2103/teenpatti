@@ -4,7 +4,8 @@
     { "source": "jg", "codebase": "judgment" },
     { "source": "dc", "codebase": "declare" },
     { "source": "dl", "codebase": "deal" },
-    { "source": "bd", "codebase": "businessdeal" }
+    { "source": "bd", "codebase": "businessdeal" },
+    { "source": "bj", "codebase": "trilux" }
   ],
   "firestore": { "rules": "firestore.rules" }
 }

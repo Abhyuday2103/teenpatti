@@ -51,7 +51,7 @@ except Exception as e:
 PY
 
 say "5/7 Installing server code"
-for d in tp jg dc dl bd; do (cd "$d" && npm install --no-audit --no-fund --silent) || { echo "npm install failed in $d"; exit 1; }; done
+for d in tp jg dc dl bd bj; do (cd "$d" && npm install --no-audit --no-fund --silent) || { echo "npm install failed in $d"; exit 1; }; done
 
 say "6/7 Deploying the five servers and database rules (5 to 10 minutes)"
 $FB deploy --only functions,firestore:rules --project "$P" --non-interactive
@@ -71,7 +71,7 @@ gcloud artifacts repositories set-cleanup-policies gcf-artifacts --location=us-c
 
 say "Checking each server answers"
 ALL=ok
-for f in tp jg dc dl bd; do
+for f in tp jg dc dl bd bj; do
   code=$(curl -s -o /tmp/r.txt -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"data":{}}' "https://us-central1-$P.cloudfunctions.net/$f")
   if grep -q '"error"' /tmp/r.txt; then echo "  $f: answering ($code)"; else echo "  $f: NOT answering ($code)"; ALL=bad; fi
 done
